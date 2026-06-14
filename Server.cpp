@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/15 02:01:28 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/15 02:04:21 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,7 +62,7 @@ void Server::run()
 		int client_fd = accept(_listen_fd, (struct sockaddr *)&client_addr, &client_len);
 		if (client_fd < 0)
 			continue;
-		
+
 		std::cout << "Client connected!" << std::endl;
 
 		char buffer[4096];
