@@ -1,15 +1,16 @@
 NAME     = webserv
 CXX      = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
-SRCS     = main.cpp Server.cpp
+SRCS     = main.cpp Server.cpp Config.cpp
 OBJS     = $(SRCS:.cpp=.o)
+HEADERS  = Server.hpp Config.hpp
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
 	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
 
-%.o: %.cpp Server.hpp
+%.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
