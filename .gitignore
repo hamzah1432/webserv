@@ -1,0 +1,22 @@
+# Compiled binary
+webserv
+
+# Object & dependency files
+*.o
+*.d
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs & core dumps
+*.log
+core
+vgcore.*
