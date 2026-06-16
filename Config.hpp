@@ -33,12 +33,6 @@ struct ServerConfig
     ServerConfig() : host("0.0.0.0"), port(0), client_max_body_size(1048576) {}
 };
 
-// Minimal, single-pass configuration parser.
-//
-//   Config config;
-//   std::vector<ServerConfig> servers = config.parse("webserv.conf");
-//
-// Throws std::runtime_error on any I/O or syntax problem.
 class Config
 {
 private:
