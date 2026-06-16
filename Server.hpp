@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/16 08:19:53 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/16 08:51:10 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,6 +44,8 @@ private:
 	void setNonBlocking(int fd);
 	void acceptNewClient();
 	void closeClient(size_t i);
+	bool handleClientRead(size_t i);
+	bool handleClientWrite(size_t i);
 
 public:
 	Server(int port);

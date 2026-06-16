@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/16 08:23:56 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/16 08:51:48 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -70,6 +70,62 @@ void Server::closeClient(size_t i)
 	_poll_fds.erase(_poll_fds.begin() + i);
 }
 
+bool Server::handleClientRead(size_t i)
+{
+	int fd = _poll_fds[i].fd;
+	Client &client = _clients[fd];
+
+	char buf[4096];
+	ssize_t n = recv(fd, buf, sizeof(buf), 0);
+
+	if (n <= 0)
+	{
+		closeClient(i);
+		return false;
+	}
+
+	client.read_buffer.append(buf, n);
+
+	if (client.read_buffer.find("\r\n\r\n") != std::string::npos)
+	{
+		std::string response = "HTTP/1.1 200 OK\r\n"
+							   "Content-Type: text/plain\r\n"
+							   "Content-Length: 13\r\n"
+							   "Connection: close\r\n\r\n"
+							   "Hello, world!";
+
+		client.write_buffer = response;
+		_poll_fds[i].events = POLLIN | POLLOUT;
+		client.read_buffer.clear();
+	}
+
+	return true;
+}
+
+bool Server::handleClientWrite(size_t i)
+{
+	int fd = _poll_fds[i].fd;
+	Client &client = _clients[fd];
+
+	ssize_t n = send(fd, client.write_buffer.c_str(), client.write_buffer.size(), 0);
+
+	if (n <= 0)
+	{
+		closeClient(i);
+		return false;
+	}
+
+	client.write_buffer.erase(0, n);
+
+	if (client.write_buffer.empty())
+	{
+		closeClient(i);
+		return false;
+	}
+
+	return true;
+}
+
 // =============================================================================
 // 3. Main Functions
 // =============================================================================
@@ -130,15 +186,10 @@ void Server::run()
 			if (_poll_fds[i].fd == _listen_fd)
 			{
 				if (_poll_fds[i].revents & POLLIN)
-				{
 					acceptNewClient();
-				}
 			}
 			else
 			{
-				int fd = _poll_fds[i].fd;
-				Client &client = _clients[fd];
-
 				if (_poll_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
 				{
 					closeClient(i);
@@ -148,54 +199,19 @@ void Server::run()
 
 				if (_poll_fds[i].revents & POLLIN)
 				{
-					char buf[4096];
-					ssize_t n = recv(fd, buf, sizeof(buf), 0);
-
-					if (n <= 0)
+					if (!handleClientRead(i))
 					{
-						closeClient(i);
 						i--;
 						continue;
-					}
-					else
-					{
-						client.read_buffer.append(buf, n);
-
-						if (client.read_buffer.find("\r\n\r\n") != std::string::npos)
-						{
-							std::string response = "HTTP/1.1 200 OK\r\n"
-												   "Content-Type: text/plain\r\n"
-												   "Content-Length: 13\r\n"
-												   "Connection: close\r\n\r\n"
-												   "Hello, world!";
-
-							client.write_buffer = response;
-							_poll_fds[i].events = POLLIN | POLLOUT;
-							client.read_buffer.clear();
-						}
 					}
 				}
 
 				if (_poll_fds[i].revents & POLLOUT)
 				{
-					ssize_t n = send(fd, client.write_buffer.c_str(), client.write_buffer.size(), 0);
-
-					if (n <= 0)
+					if (!handleClientWrite(i))
 					{
-						closeClient(i);
 						i--;
 						continue;
-					}
-					else
-					{
-						client.write_buffer.erase(0, n);
-
-						if (client.write_buffer.empty())
-						{
-							closeClient(i);
-							i--;
-							continue;
-						}
 					}
 				}
 			}
