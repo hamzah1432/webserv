@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:49:59 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/16 08:51:48 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/21 14:54:43 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 		std::vector<ServerConfig> servers = config.parse(path);
 
 		// Day 3 will host every server; for now we launch the first one.
-		Server server(servers[0].port);
+		Server server(servers);
 		server.setup();
 		server.run();
 	}

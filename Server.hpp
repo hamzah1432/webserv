@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/16 08:51:10 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/21 14:48:24 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,34 +21,36 @@
 #include <map>
 #include <string>
 #include <poll.h>
+#include "Config.hpp"
 
 struct Client
 {
 	int fd;
 	std::string read_buffer;
 	std::string write_buffer;
+	size_t server_index;
 };
 
 class Server
 {
 private:
-	int _listen_fd;
-	int _port;
-	struct sockaddr_in _addr;
 	std::vector<struct pollfd> _poll_fds;
 	std::map<int, Client> _clients;
+	std::vector<ServerConfig> _configs;
+	std::map<int, size_t> _listen_fds;
+
 	// Orthodox Canonical Form
 	Server(const Server &other);
 	Server &operator=(const Server &other);
 	// Helper Functions
 	void setNonBlocking(int fd);
-	void acceptNewClient();
+	void acceptNewClient(int listen_fd);
 	void closeClient(size_t i);
 	bool handleClientRead(size_t i);
 	bool handleClientWrite(size_t i);
 
 public:
-	Server(int port);
+	Server(const std::vector<ServerConfig> &configs);
 	~Server();
 	void setup();
 	void run();

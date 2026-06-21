@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/16 08:51:48 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/21 15:08:37 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,11 +25,14 @@
 // 1. Orthodox Canonical Form
 // =============================================================================
 
-Server::Server(int port) : _listen_fd(-1), _port(port) {}
+Server::Server(const std::vector<ServerConfig> &configs) : _configs(configs) {}
+
 Server::~Server()
 {
-	if (_listen_fd >= 0)
-		close(_listen_fd);
+	for (std::map<int, size_t>::iterator it = _listen_fds.begin(); it != _listen_fds.end(); ++it)
+	{
+		close(it->first);
+	}
 }
 
 // =============================================================================
@@ -42,9 +45,9 @@ void Server::setNonBlocking(int fd)
 		throw std::runtime_error("Failed to set non-blocking");
 }
 
-void Server::acceptNewClient()
+void Server::acceptNewClient(int listen_fd)
 {
-	int client_fd = accept(_listen_fd, NULL, NULL);
+	int client_fd = accept(listen_fd, NULL, NULL);
 	if (client_fd < 0)
 		return;
 	setNonBlocking(client_fd);
@@ -58,6 +61,7 @@ void Server::acceptNewClient()
 	new_client.fd = client_fd;
 	new_client.read_buffer = "";
 	new_client.write_buffer = "";
+	new_client.server_index = _listen_fds[listen_fd];
 	_clients[client_fd] = new_client;
 }
 
@@ -133,40 +137,44 @@ bool Server::handleClientWrite(size_t i)
 void Server::setup()
 {
 	int opt = 1;
-	_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-
-	if (_listen_fd < 0)
+	for (size_t i = 0; i < _configs.size(); i++)
 	{
-		throw std::runtime_error("Failed to create socket");
+
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0)
+			throw std::runtime_error("Failed to create socket");
+
+		_listen_fds[fd] = i;
+
+		if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+		{
+			throw std::runtime_error("Failed to set SO_REUSEADDR");
+		}
+
+		sockaddr_in addr;
+		std::memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = htons(_configs[i].port);
+
+		if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+		{
+			throw std::runtime_error("Failed to bind socket");
+		}
+
+		if (listen(fd, SOMAXCONN) < 0)
+		{
+			throw std::runtime_error("Failed to listen on socket");
+		}
+
+		setNonBlocking(fd);
+
+		struct pollfd listen_pfd;
+		listen_pfd.fd = fd;
+		listen_pfd.events = POLLIN;
+		listen_pfd.revents = 0;
+		_poll_fds.push_back(listen_pfd);
 	}
-
-	if (setsockopt(_listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-	{
-		throw std::runtime_error("Failed to set SO_REUSEADDR");
-	}
-
-	std::memset(&_addr, 0, sizeof(_addr));
-	_addr.sin_family = AF_INET;
-	_addr.sin_addr.s_addr = INADDR_ANY;
-	_addr.sin_port = htons(_port);
-
-	if (bind(_listen_fd, (struct sockaddr *)&_addr, sizeof(_addr)) < 0)
-	{
-		throw std::runtime_error("Failed to bind socket");
-	}
-
-	if (listen(_listen_fd, SOMAXCONN) < 0)
-	{
-		throw std::runtime_error("Failed to listen on socket");
-	}
-
-	setNonBlocking(_listen_fd);
-
-	struct pollfd listen_pfd;
-	listen_pfd.fd = _listen_fd;
-	listen_pfd.events = POLLIN;
-	listen_pfd.revents = 0;
-	_poll_fds.push_back(listen_pfd);
 }
 
 void Server::run()
@@ -183,10 +191,10 @@ void Server::run()
 			if (_poll_fds[i].revents == 0)
 				continue;
 
-			if (_poll_fds[i].fd == _listen_fd)
+			if (_listen_fds.count(_poll_fds[i].fd))
 			{
 				if (_poll_fds[i].revents & POLLIN)
-					acceptNewClient();
+					acceptNewClient(_poll_fds[i].fd);
 			}
 			else
 			{
