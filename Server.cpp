@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/21 15:08:37 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/21 19:48:39 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,9 +59,9 @@ void Server::acceptNewClient(int listen_fd)
 
 	Client new_client;
 	new_client.fd = client_fd;
-	new_client.read_buffer = "";
 	new_client.write_buffer = "";
 	new_client.server_index = _listen_fds[listen_fd];
+	new_client.request.setMaxBodySize(_configs[new_client.server_index].client_max_body_size);
 	_clients[client_fd] = new_client;
 }
 
@@ -88,19 +88,51 @@ bool Server::handleClientRead(size_t i)
 		return false;
 	}
 
-	client.read_buffer.append(buf, n);
+	client.request.feed(std::string(buf, n));
 
-	if (client.read_buffer.find("\r\n\r\n") != std::string::npos)
+	if (client.request.isComplete())
 	{
-		std::string response = "HTTP/1.1 200 OK\r\n"
-							   "Content-Type: text/plain\r\n"
-							   "Content-Length: 13\r\n"
-							   "Connection: close\r\n\r\n"
-							   "Hello, world!";
+		HTTPResponse response;
 
-		client.write_buffer = response;
-		_poll_fds[i].events = POLLIN | POLLOUT;
-		client.read_buffer.clear();
+		if (!client.request.isValid())
+		{
+			response.setStatus(client.request.getErrorCode());
+			response.setBody("Error: Bad Request\n");
+		}
+		else
+		{
+			const ServerConfig &current_server = _configs[client.server_index];
+			const LocationConfig *matched_loc = matchLocation(current_server, client.request.getUri());
+
+			if (matched_loc == NULL)
+			{
+				response.setStatus(404);
+				response.setBody("Error 404: Not Found\n");
+			}
+			else
+			{
+				std::string real_filepath = resolvePath(*matched_loc, client.request.getUri());
+
+				std::ifstream file(real_filepath.c_str(), std::ios::binary);
+				if (!file.is_open())
+				{
+					response.setStatus(404);
+					response.setBody("Error 404: Not Found\n");
+				}
+				else
+				{
+					std::stringstream ss;
+					ss << file.rdbuf();
+					response.setStatus(200);
+					response.setBody(ss.str());
+					response.setHeader("Content-Type", getContentType(real_filepath));
+				}
+			}
+		}
+
+		client.write_buffer = response.toString();
+
+		_poll_fds[i].events = POLLOUT;
 	}
 
 	return true;
@@ -128,6 +160,68 @@ bool Server::handleClientWrite(size_t i)
 	}
 
 	return true;
+}
+
+const LocationConfig *Server::matchLocation(const ServerConfig &server, const std::string &uri)
+{
+	const LocationConfig *winner = NULL;
+	size_t longest_match = 0;
+
+	for (size_t i = 0; i < server.locations.size(); ++i)
+	{
+		const LocationConfig &loc = server.locations[i];
+
+		if (uri.compare(0, loc.path.size(), loc.path) == 0)
+		{
+			if (loc.path == "/" || uri.size() == loc.path.size() || uri[loc.path.size()] == '/')
+			{
+				if (loc.path.size() > longest_match)
+				{
+					longest_match = loc.path.size();
+					winner = &loc;
+				}
+			}
+		}
+	}
+	return winner;
+}
+
+std::string Server::resolvePath(const LocationConfig &loc, const std::string &uri)
+{
+	std::string remainder = uri.substr(loc.path.size());
+
+	std::string root = loc.root;
+	if (!root.empty() && root[root.size() - 1] == '/')
+		root.erase(root.size() - 1);
+
+	if (remainder.empty() || remainder[0] != '/')
+		remainder = "/" + remainder;
+
+	return root + remainder;
+}
+
+std::string Server::getContentType(const std::string &path)
+{
+	std::string::size_type dot = path.rfind('.');
+	if (dot == std::string::npos)
+		return "application/octet-stream";
+
+	std::string ext = path.substr(dot); // includes the dot, e.g. ".html"
+	if (ext == ".html" || ext == ".htm")
+		return "text/html";
+	if (ext == ".css")
+		return "text/css";
+	if (ext == ".js")
+		return "application/javascript";
+	if (ext == ".png")
+		return "image/png";
+	if (ext == ".jpg" || ext == ".jpeg")
+		return "image/jpeg";
+	if (ext == ".gif")
+		return "image/gif";
+	if (ext == ".txt")
+		return "text/plain";
+	return "application/octet-stream";
 }
 
 // =============================================================================

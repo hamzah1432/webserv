@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/21 14:48:24 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/21 20:12:38 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,13 +22,18 @@
 #include <string>
 #include <poll.h>
 #include "Config.hpp"
+#include "HTTPRequest.hpp"
+#include "HTTPResponse.hpp"
+#include <fstream>
+#include <sstream>
 
 struct Client
 {
 	int fd;
-	std::string read_buffer;
 	std::string write_buffer;
 	size_t server_index;
+	HTTPRequest request;
+	Client() : fd(-1), server_index(0) {}
 };
 
 class Server
@@ -48,7 +53,9 @@ private:
 	void closeClient(size_t i);
 	bool handleClientRead(size_t i);
 	bool handleClientWrite(size_t i);
-
+	const LocationConfig *matchLocation(const ServerConfig &server, const std::string &uri);
+	std::string resolvePath(const LocationConfig &loc, const std::string &uri);
+	std::string getContentType(const std::string &path);
 public:
 	Server(const std::vector<ServerConfig> &configs);
 	~Server();
