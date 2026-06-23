@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/23 19:37:55 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/23 23:34:01 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -64,6 +64,8 @@ private:
 	bool checkMethodAllowed(const std::vector<std::string> &methods, const std::string &method);
 	std::string getErrorBody(const ServerConfig &server, int code);
 	HTTPResponse makeErrorResponse(const ServerConfig &server, int code);
+
+	HTTPResponse handleGet(const ServerConfig &server, const LocationConfig &loc, const HTTPRequest &request);
 
 	// Utility Functions
 	std::string numToString(int number);
