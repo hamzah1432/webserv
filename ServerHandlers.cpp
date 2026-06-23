@@ -3,6 +3,11 @@
 #include <dirent.h>
 #include <fstream>
 #include <sstream>
+#include <cstdio>
+
+// =============================================================================
+// Get Request Handling
+// =============================================================================
 
 HTTPResponse Server::handleGet(const ServerConfig &server, const LocationConfig &loc, const HTTPRequest &request)
 {
@@ -137,4 +142,109 @@ std::string Server::generateAutoindex(const std::string &dir_path, const std::st
 
 	ss << "</ul>\n<hr>\n</body>\n</html>\n";
 	return ss.str();
-}   
+}
+
+// =============================================================================
+// Post Request Handling
+// =============================================================================
+
+bool Server::writeFile(const std::string &path, const std::string &content)
+{
+	std::ofstream f(path.c_str(), std::ios::binary | std::ios::trunc);
+	if (!f.is_open())
+		return false;
+
+	f.write(content.c_str(), content.size());
+	return f.good();
+}
+
+HTTPResponse Server::handlePost(const ServerConfig &server, const LocationConfig &loc, const HTTPRequest &request)
+{
+	HTTPResponse response;
+
+	if (loc.upload_path.empty())
+		return makeErrorResponse(server, 403);
+
+	std::string uri = request.getUri();
+
+	if (!uri.empty() && uri[uri.size() - 1] == '/')
+		return makeErrorResponse(server, 400);
+
+	std::string::size_type last_slash = uri.rfind('/');
+	std::string filename = "";
+	if (last_slash == std::string::npos)
+	{
+		filename = uri;
+	}
+	else
+	{
+		filename = uri.substr(last_slash + 1);
+	}
+
+	std::string upload_dir = loc.upload_path;
+	if (!upload_dir.empty() && upload_dir[upload_dir.size() - 1] != '/')
+		upload_dir += '/';
+
+	std::string full_dest_path = upload_dir + filename;
+
+	if (!writeFile(full_dest_path, request.getBody()))
+	{
+		response.setStatus(500);
+	}
+	else
+	{
+		response.setStatus(201);
+		response.setBody("<html><body><h1>201 Created</h1><p>File uploaded successfully.</p></body></html>");
+		response.setHeader("Content-Type", "text/html");
+	}
+
+	if (response.getStatus() >= 400)
+	{
+		response.setBody(getErrorBody(server, response.getStatus()));
+		response.setHeader("Content-Type", "text/html");
+	}
+
+	return response;
+}
+
+// =============================================================================
+// Delete Request Handling
+// =============================================================================
+
+HTTPResponse Server::handleDelete(const ServerConfig &server, const LocationConfig &loc, const HTTPRequest &request)
+{
+    HTTPResponse response;
+
+    std::string real_filepath = resolvePath(loc, request.getUri());
+
+    struct stat st;
+    if (stat(real_filepath.c_str(), &st) != 0)
+    {
+        response.setStatus(404);
+    }
+    else if (S_ISDIR(st.st_mode))
+    {
+        response.setStatus(403);
+    }
+    else
+    {
+        if (std::remove(real_filepath.c_str()) != 0)
+        {
+            response.setStatus(403);
+        }
+        else
+        {
+            response.setStatus(200);
+            response.setBody("<html><body><h1>200 OK</h1><p>File deleted successfully.</p></body></html>");
+            response.setHeader("Content-Type", "text/html");
+        }
+    }
+
+    if (response.getStatus() >= 400)
+    {
+        response.setBody(getErrorBody(server, response.getStatus()));
+        response.setHeader("Content-Type", "text/html");
+    }
+
+    return response;
+}

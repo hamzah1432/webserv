@@ -37,7 +37,11 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 	std::string method = request.getMethod();
 	if (method == "GET")
 		return handleGet(server, *matched_loc, request);
-	// POST and DELETE handlers come next
+	if (method == "POST")
+		return handlePost(server, *matched_loc, request);
+	if (method == "DELETE")
+		return handleDelete(server, *matched_loc, request);
+
 	return makeErrorResponse(server, 501);
 }
 
@@ -101,19 +105,38 @@ std::string Server::getErrorBody(const ServerConfig &server, int code)
 	std::string status_text;
 	switch (code)
 	{
-	case 400: status_text = "400 Bad Request"; break;
-	case 403: status_text = "403 Forbidden"; break;
-	case 404: status_text = "404 Not Found"; break;
-	case 405: status_text = "405 Method Not Allowed"; break;
-	case 413: status_text = "413 Payload Too Large"; break;
-	case 500: status_text = "500 Internal Server Error"; break;
-	case 501: status_text = "501 Not Implemented"; break;
-	case 505: status_text = "505 HTTP Version Not Supported"; break;
-	default:  status_text = numToString(code) + " Error"; break;
+	case 400:
+		status_text = "400 Bad Request";
+		break;
+	case 403:
+		status_text = "403 Forbidden";
+		break;
+	case 404:
+		status_text = "404 Not Found";
+		break;
+	case 405:
+		status_text = "405 Method Not Allowed";
+		break;
+	case 413:
+		status_text = "413 Payload Too Large";
+		break;
+	case 500:
+		status_text = "500 Internal Server Error";
+		break;
+	case 501:
+		status_text = "501 Not Implemented";
+		break;
+	case 505:
+		status_text = "505 HTTP Version Not Supported";
+		break;
+	default:
+		status_text = numToString(code) + " Error";
+		break;
 	}
 
 	return "<html><head><title>" + status_text + "</title></head>"
-		   "<body><center><h1>" + status_text +
+												 "<body><center><h1>" +
+		   status_text +
 		   "</h1></center><hr><center>webserv/1.0</center></body></html>";
 }
 
