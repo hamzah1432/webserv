@@ -6,16 +6,18 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:49:59 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/21 14:54:43 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/22 09:15:11 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 #include "Config.hpp"
 #include <iostream>
+#include <csignal>
 
 int main(int argc, char **argv)
 {
+	signal(SIGPIPE, SIG_IGN);
 	if (argc > 2)
 	{
 		std::cerr << "Usage: ./webserv [configuration file]" << '\n';
@@ -29,7 +31,6 @@ int main(int argc, char **argv)
 		Config config;
 		std::vector<ServerConfig> servers = config.parse(path);
 
-		// Day 3 will host every server; for now we launch the first one.
 		Server server(servers);
 		server.setup();
 		server.run();

@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/21 19:48:39 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/22 09:15:29 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,7 +19,6 @@
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
-#include <cstring>
 
 // =============================================================================
 // 1. Orthodox Canonical Form
@@ -81,7 +80,6 @@ bool Server::handleClientRead(size_t i)
 
 	char buf[4096];
 	ssize_t n = recv(fd, buf, sizeof(buf), 0);
-
 	if (n <= 0)
 	{
 		closeClient(i);
@@ -92,49 +90,10 @@ bool Server::handleClientRead(size_t i)
 
 	if (client.request.isComplete())
 	{
-		HTTPResponse response;
-
-		if (!client.request.isValid())
-		{
-			response.setStatus(client.request.getErrorCode());
-			response.setBody("Error: Bad Request\n");
-		}
-		else
-		{
-			const ServerConfig &current_server = _configs[client.server_index];
-			const LocationConfig *matched_loc = matchLocation(current_server, client.request.getUri());
-
-			if (matched_loc == NULL)
-			{
-				response.setStatus(404);
-				response.setBody("Error 404: Not Found\n");
-			}
-			else
-			{
-				std::string real_filepath = resolvePath(*matched_loc, client.request.getUri());
-
-				std::ifstream file(real_filepath.c_str(), std::ios::binary);
-				if (!file.is_open())
-				{
-					response.setStatus(404);
-					response.setBody("Error 404: Not Found\n");
-				}
-				else
-				{
-					std::stringstream ss;
-					ss << file.rdbuf();
-					response.setStatus(200);
-					response.setBody(ss.str());
-					response.setHeader("Content-Type", getContentType(real_filepath));
-				}
-			}
-		}
-
+		HTTPResponse response = buildResponse(_configs[client.server_index], client.request);
 		client.write_buffer = response.toString();
-
 		_poll_fds[i].events = POLLOUT;
 	}
-
 	return true;
 }
 
@@ -206,7 +165,7 @@ std::string Server::getContentType(const std::string &path)
 	if (dot == std::string::npos)
 		return "application/octet-stream";
 
-	std::string ext = path.substr(dot); // includes the dot, e.g. ".html"
+	std::string ext = path.substr(dot);
 	if (ext == ".html" || ext == ".htm")
 		return "text/html";
 	if (ext == ".css")
@@ -222,6 +181,135 @@ std::string Server::getContentType(const std::string &path)
 	if (ext == ".txt")
 		return "text/plain";
 	return "application/octet-stream";
+}
+
+bool Server::readFile(const std::string &path, std::string &out)
+{
+	std::ifstream f(path.c_str(), std::ios::binary);
+	if (!f.is_open())
+		return false;
+	std::stringstream ss;
+	ss << f.rdbuf();
+	out = ss.str();
+	return true;
+}
+
+HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest &request)
+{
+	HTTPResponse response;
+
+	if (!request.isValid())
+	{
+		response.setStatus(request.getErrorCode());
+		response.setBody("Error: Bad Request\n");
+		return response;
+	}
+
+	const LocationConfig *matched_loc = matchLocation(server, request.getUri());
+	if (matched_loc == NULL)
+	{
+		response.setStatus(404);
+		response.setBody("Error 404: Not Found\n");
+		return response;
+	}
+
+	std::string real_filepath = resolvePath(*matched_loc, request.getUri());
+
+	struct stat st;
+	if (stat(real_filepath.c_str(), &st) != 0)
+	{
+		response.setStatus(404);
+		response.setBody("Error 404: Not Found\n");
+	}
+	else if (S_ISDIR(st.st_mode))
+	{
+		std::string index_path = real_filepath;
+		if (!index_path.empty() && index_path[index_path.size() - 1] != '/')
+			index_path += '/';
+		index_path += matched_loc->index;
+
+		std::string file_content;
+		if (!matched_loc->index.empty() && readFile(index_path, file_content))
+		{
+			response.setStatus(200);
+			response.setBody(file_content);
+			response.setHeader("Content-Type", getContentType(index_path));
+		}
+		else if (matched_loc->autoindex)
+		{
+			response.setStatus(200);
+			response.setBody(generateAutoindex(real_filepath, request.getUri()));
+			response.setHeader("Content-Type", "text/html");
+		}
+		else
+		{
+			response.setStatus(403);
+			response.setBody("Error 403: Forbidden\n");
+		}
+	}
+	else
+	{
+		std::string file_content;
+		if (!readFile(real_filepath, file_content))
+		{
+			response.setStatus(403);
+			response.setBody("Error 403: Forbidden\n");
+		}
+		else
+		{
+			response.setStatus(200);
+			response.setBody(file_content);
+			response.setHeader("Content-Type", getContentType(real_filepath));
+		}
+	}
+
+	return response;
+}
+
+std::string Server::generateAutoindex(const std::string &dir_path, const std::string &uri)
+{
+	DIR *dir = opendir(dir_path.c_str());
+	if (dir == NULL)
+	{
+		return "<html><body><h1>Error 500</h1><p>Cannot open directory</p></body></html>";
+	}
+
+	std::stringstream ss;
+
+	std::string base_uri = uri;
+	if (base_uri.empty() || base_uri[base_uri.size() - 1] != '/')
+		base_uri += '/';
+
+	ss << "<html>\n<head>\n<title>Index of " << uri << "</title>\n";
+	ss << "<style>\n"
+	   << "  body { font-family: monospace; margin: 20px; background-color: #f8f9fa; }\n"
+	   << "  h1 { color: #212529; }\n"
+	   << "  hr { border: 0; border-top: 1px solid #dee2e6; margin: 10px 0; }\n"
+	   << "  ul { list-style-type: none; padding-left: 5px; }\n"
+	   << "  li { margin: 6px 0; font-size: 16px; }\n"
+	   << "  a { color: #0056b3; text-decoration: none; }\n"
+	   << "  a:hover { text-decoration: underline; }\n"
+	   << "</style>\n</head>\n<body>\n";
+
+	ss << "<h1>Index of " << uri << "</h1>\n<hr>\n<ul>\n";
+
+	struct dirent *entry;
+	while ((entry = readdir(dir)) != NULL)
+	{
+		std::string name = entry->d_name;
+
+		if (name == ".")
+			continue;
+
+		std::string href = base_uri + name;
+
+		ss << "    <li><a href=\"" << href << "\">" << name << "</a></li>\n";
+	}
+	closedir(dir);
+
+	ss << "</ul>\n<hr>\n</body>\n</html>\n";
+
+	return ss.str();
 }
 
 // =============================================================================

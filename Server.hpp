@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/21 20:12:38 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/22 06:35:12 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,6 +26,8 @@
 #include "HTTPResponse.hpp"
 #include <fstream>
 #include <sstream>
+#include <sys/stat.h>
+#include <dirent.h>
 
 struct Client
 {
@@ -56,6 +58,9 @@ private:
 	const LocationConfig *matchLocation(const ServerConfig &server, const std::string &uri);
 	std::string resolvePath(const LocationConfig &loc, const std::string &uri);
 	std::string getContentType(const std::string &path);
+	bool readFile(const std::string &path, std::string &out);
+	HTTPResponse buildResponse(const ServerConfig &server, const HTTPRequest &request);
+	std::string generateAutoindex(const std::string &dir_path, const std::string &uri);
 public:
 	Server(const std::vector<ServerConfig> &configs);
 	~Server();
