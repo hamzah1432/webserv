@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>403 - Forbidden</title>
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Poppins", sans-serif;
+    }
+
+    body {
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(
+            135deg,
+            #0f172a,
+            #1e293b,
+            #312e81
+        );
+        overflow: hidden;
+        color: white;
+    }
+
+    /* Animated background blobs */
+    .blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.4;
+        animation: float 8s ease-in-out infinite;
+    }
+
+    .blob1 {
+        width: 350px;
+        height: 350px;
+        background: #8b5cf6;
+        top: -100px;
+        left: -100px;
+    }
+
+    .blob2 {
+        width: 300px;
+        height: 300px;
+        background: #06b6d4;
+        bottom: -80px;
+        right: -80px;
+        animation-delay: 2s;
+    }
+
+    .blob3 {
+        width: 250px;
+        height: 250px;
+        background: #ec4899;
+        top: 50%;
+        left: 60%;
+        animation-delay: 4s;
+    }
+
+    @keyframes float {
+        0%, 100% {
+            transform: translateY(0) scale(1);
+        }
+        50% {
+            transform: translateY(-40px) scale(1.1);
+        }
+    }
+
+    .container {
+        position: relative;
+        z-index: 10;
+        text-align: center;
+        padding: 50px;
+        width: 90%;
+        max-width: 700px;
+
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 30px;
+
+        box-shadow:
+            0 20px 60px rgba(0,0,0,0.35),
+            inset 0 0 20px rgba(255,255,255,0.05);
+    }
+
+    .error-code {
+        font-size: clamp(6rem, 15vw, 10rem);
+        font-weight: 800;
+        line-height: 1;
+        background: linear-gradient(
+            90deg,
+            #60a5fa,
+            #a855f7,
+            #ec4899
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 30px rgba(168,85,247,0.4);
+        animation: glow 3s infinite alternate;
+    }
+
+    @keyframes glow {
+        from {
+            filter: drop-shadow(0 0 10px rgba(168,85,247,.5));
+        }
+        to {
+            filter: drop-shadow(0 0 30px rgba(236,72,153,.8));
+        }
+    }
+
+    h1 {
+        margin-top: 10px;
+        font-size: 2rem;
+        margin-bottom: 15px;
+    }
+
+    p {
+        color: rgba(255,255,255,0.8);
+        font-size: 1.05rem;
+        line-height: 1.7;
+        margin-bottom: 35px;
+    }
+
+    .buttons {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        text-decoration: none;
+        padding: 14px 28px;
+        border-radius: 999px;
+        font-weight: 600;
+        transition: all 0.35s ease;
+    }
+
+    .primary {
+        background: linear-gradient(
+            135deg,
+            #7c3aed,
+            #ec4899
+        );
+        color: white;
+        box-shadow: 0 10px 25px rgba(168,85,247,0.4);
+    }
+
+    .primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 35px rgba(168,85,247,0.6);
+    }
+
+    .secondary {
+        border: 1px solid rgba(255,255,255,0.25);
+        color: white;
+        background: rgba(255,255,255,0.05);
+    }
+
+    .secondary:hover {
+        background: rgba(255,255,255,0.12);
+        transform: translateY(-3px);
+    }
+
+    .astronaut {
+        font-size: 5rem;
+        display: inline-block;
+        margin-bottom: 15px;
+        animation: astronautFloat 4s ease-in-out infinite;
+    }
+
+    @keyframes astronautFloat {
+        0%,100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-15px);
+        }
+    }
+
+    @media (max-width: 600px) {
+        .container {
+            padding: 35px 25px;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+        }
+
+        p {
+            font-size: 0.95rem;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+<div class="blob blob3"></div>
+
+<div class="container">
+    <div class="astronaut">🚀</div>
+
+    <div class="error-code">403</div>
+
+    <h1>Oops! Page Not Found</h1>
+
+    <p>
+        The page you're looking for seems to have drifted into deep space.
+        It may have been moved, deleted, or never existed.
+    </p>
+
+    <div class="buttons">
+        <a href="/" class="btn primary">Go Home</a>
+        <a href="javascript:history.back()" class="btn secondary">Go Back</a>
+    </div>
+</div>
+
+</body>
+</html>

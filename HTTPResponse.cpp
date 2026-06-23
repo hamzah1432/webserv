@@ -109,3 +109,7 @@ std::string HTTPResponse::toString() const
 
     return oss.str();
 }
+
+int HTTPResponse::getStatus() const {
+    return this->_code;
+}

@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/22 06:35:12 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/23 19:37:55 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -61,6 +61,13 @@ private:
 	bool readFile(const std::string &path, std::string &out);
 	HTTPResponse buildResponse(const ServerConfig &server, const HTTPRequest &request);
 	std::string generateAutoindex(const std::string &dir_path, const std::string &uri);
+	bool checkMethodAllowed(const std::vector<std::string> &methods, const std::string &method);
+	std::string getErrorBody(const ServerConfig &server, int code);
+	HTTPResponse makeErrorResponse(const ServerConfig &server, int code);
+
+	// Utility Functions
+	std::string numToString(int number);
+
 public:
 	Server(const std::vector<ServerConfig> &configs);
 	~Server();

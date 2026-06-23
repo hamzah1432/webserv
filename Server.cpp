@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/22 09:15:29 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/23 19:44:42 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
+#include <algorithm>
 
 // =============================================================================
 // 1. Orthodox Canonical Form
@@ -199,17 +200,31 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 	HTTPResponse response;
 
 	if (!request.isValid())
-	{
-		response.setStatus(request.getErrorCode());
-		response.setBody("Error: Bad Request\n");
-		return response;
-	}
+		return makeErrorResponse(server, request.getErrorCode());
 
 	const LocationConfig *matched_loc = matchLocation(server, request.getUri());
 	if (matched_loc == NULL)
+		return makeErrorResponse(server, 404);
+
+	if (!checkMethodAllowed(matched_loc->methods, request.getMethod()))
 	{
-		response.setStatus(404);
-		response.setBody("Error 404: Not Found\n");
+		std::string allowed_methods = "";
+		for (size_t i = 0; i < matched_loc->methods.size(); ++i)
+		{
+			allowed_methods += matched_loc->methods[i];
+			if (i < matched_loc->methods.size() - 1)
+				allowed_methods += ", ";
+		}
+
+		response = makeErrorResponse(server, 405);
+		response.setHeader("Allow", allowed_methods);
+		return response;
+	}
+
+	if (!matched_loc->redirect.empty())
+	{
+		response.setStatus(301);
+		response.setHeader("Location", matched_loc->redirect);
 		return response;
 	}
 
@@ -219,7 +234,6 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 	if (stat(real_filepath.c_str(), &st) != 0)
 	{
 		response.setStatus(404);
-		response.setBody("Error 404: Not Found\n");
 	}
 	else if (S_ISDIR(st.st_mode))
 	{
@@ -244,7 +258,6 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 		else
 		{
 			response.setStatus(403);
-			response.setBody("Error 403: Forbidden\n");
 		}
 	}
 	else
@@ -253,7 +266,6 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 		if (!readFile(real_filepath, file_content))
 		{
 			response.setStatus(403);
-			response.setBody("Error 403: Forbidden\n");
 		}
 		else
 		{
@@ -261,6 +273,12 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 			response.setBody(file_content);
 			response.setHeader("Content-Type", getContentType(real_filepath));
 		}
+	}
+
+	if (response.getStatus() >= 400)
+	{
+		response.setBody(getErrorBody(server, response.getStatus()));
+		response.setHeader("Content-Type", "text/html");
 	}
 
 	return response;
@@ -312,8 +330,90 @@ std::string Server::generateAutoindex(const std::string &dir_path, const std::st
 	return ss.str();
 }
 
+bool Server::checkMethodAllowed(const std::vector<std::string> &methods, const std::string &method)
+{
+	if (methods.empty())
+		return true;
+
+	return std::find(methods.begin(), methods.end(), method) != methods.end();
+}
+
+std::string Server::getErrorBody(const ServerConfig &server, int code)
+{
+	std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+
+	if (it != server.error_pages.end())
+	{
+		std::string file_content = "";
+		if (readFile(it->second, file_content) && !file_content.empty())
+		{
+			return file_content;
+		}
+	}
+
+	std::string status_text;
+	switch (code)
+	{
+	case 400:
+		status_text = "400 Bad Request";
+		break;
+	case 403:
+		status_text = "403 Forbidden";
+		break;
+	case 404:
+		status_text = "404 Not Found";
+		break;
+	case 405:
+		status_text = "405 Method Not Allowed";
+		break;
+	case 413:
+		status_text = "413 Payload Too Large";
+		break;
+	case 500:
+		status_text = "500 Internal Server Error";
+		break;
+	case 501:
+		status_text = "501 Not Implemented";
+		break;
+	case 505:
+		status_text = "505 HTTP Version Not Supported";
+		break;
+	default:
+	{
+		status_text = numToString(code) + " Error";
+		break;
+	}
+	}
+
+	return "<html><head><title>" + status_text + "</title></head>"
+												 "<body><center><h1>" +
+		   status_text + "</h1></center><hr><center>webserv/1.0</center></body></html>";
+}
+
+HTTPResponse Server::makeErrorResponse(const ServerConfig &server, int code)
+{
+	HTTPResponse response;
+
+	response.setStatus(code);
+	response.setBody(getErrorBody(server, code));
+	response.setHeader("Content-Type", "text/html");
+
+	return response;
+}
+
 // =============================================================================
-// 3. Main Functions
+// 3. Utility Functions
+// =============================================================================
+
+std::string Server::numToString(int number)
+{
+	std::stringstream ss;
+	ss << number;
+	return ss.str();
+}
+
+// =============================================================================
+// 4. Main Functions
 // =============================================================================
 
 void Server::setup()
