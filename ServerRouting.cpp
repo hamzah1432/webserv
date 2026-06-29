@@ -8,7 +8,7 @@ HTTPResponse Server::buildResponse(const ServerConfig &server, const HTTPRequest
 	if (!request.isValid())
 		return makeErrorResponse(server, request.getErrorCode());
 
-	const LocationConfig *matched_loc = matchLocation(server, request.getURI());
+	const LocationConfig *matched_loc = matchLocation(server, request.getPath());
 	if (matched_loc == NULL)
 		return makeErrorResponse(server, 404);
 
