@@ -175,6 +175,7 @@ bool Server::handleCgiIo(size_t i)
 	int fd = _poll_fds[i].fd;
 	int client_fd = _cgi_fds[fd];
 	Client &client = _clients[client_fd];
+	client.last_activity = time(NULL);
 
 	if (fd == client.cgi.stdin_fd && (_poll_fds[i].revents & POLLOUT))
 	{
@@ -218,7 +219,6 @@ bool Server::handleCgiIo(size_t i)
 		HTTPResponse response = parseCgiOutput(client.cgi.output);
 		client.write_buffer = response.build();
 		client.state = WRITING;
-
 
 		for (size_t k = 0; k < _poll_fds.size(); ++k)
 		{

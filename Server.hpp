@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:36:20 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/29 10:59:22 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:13:39 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,9 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <csignal>
+#include <sys/wait.h>
+
 
 enum ClientState
 {
@@ -56,7 +59,8 @@ struct Client
 	HTTPRequest request;
 	ClientState state;
 	CgiProcess cgi;
-	Client() : fd(-1), server_index(0), state(READING) {}
+	time_t last_activity;
+	Client() : fd(-1), server_index(0), state(READING), last_activity(time(0)) {}
 };
 
 class Server
@@ -101,6 +105,9 @@ private:
 
 	// Utility Functions
 	std::string numToString(int number);
+	void checkTimeouts();
+	void removePollFd(int fd);
+	void closeClientFull(int client_fd);
 
 public:
 	Server(const std::vector<ServerConfig> &configs);

@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/29 13:38:48 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:19:09 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,7 +60,7 @@ void Server::acceptNewClient(int listen_fd)
 	new_client.fd = client_fd;
 	new_client.write_buffer = "";
 	new_client.server_index = _listen_fds[listen_fd];
-	// new_client.request.setMaxBodySize(_configs[new_client.server_index].client_max_body_size);
+	new_client.last_activity = time(NULL);
 	_clients[client_fd] = new_client;
 }
 
@@ -85,7 +85,7 @@ bool Server::handleClientRead(size_t i)
 		closeClient(i);
 		return false;
 	}
-
+	client.last_activity = time(NULL);
 	client.request.feed(std::string(buf, n));
 
 	if (client.request.isComplete())
@@ -97,7 +97,7 @@ bool Server::handleClientRead(size_t i)
 		{
 			HTTPResponse response = makeErrorResponse(server, 413);
 			response.setHeader("Connection", "close");
-			client.write_buffer = response.build() + "\r\n";
+			client.write_buffer = response.build();
 			_poll_fds[i].events = POLLOUT;
 			return true;
 		}
@@ -122,6 +122,7 @@ bool Server::handleClientRead(size_t i)
 		else
 		{
 			HTTPResponse response = buildResponse(server, req);
+			response.setHeader("Connection", "close");
 			client.write_buffer = response.build();
 			_poll_fds[i].events = POLLOUT;
 		}
@@ -135,12 +136,12 @@ bool Server::handleClientWrite(size_t i)
 	Client &client = _clients[fd];
 
 	ssize_t n = send(fd, client.write_buffer.c_str(), client.write_buffer.size(), 0);
-
 	if (n <= 0)
 	{
 		closeClient(i);
 		return false;
 	}
+	client.last_activity = time(NULL);
 
 	client.write_buffer.erase(0, n);
 
@@ -151,6 +152,67 @@ bool Server::handleClientWrite(size_t i)
 	}
 
 	return true;
+}
+
+void Server::checkTimeouts()
+{
+	time_t now = time(NULL);
+	const time_t LIMIT = 30;
+
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end();)
+	{
+		int client_fd = it->first;
+		Client &client = it->second;
+		++it;
+
+		if (now - client.last_activity > LIMIT)
+			closeClientFull(client_fd);
+	}
+}
+
+void Server::removePollFd(int fd)
+{
+	for (size_t k = 0; k < _poll_fds.size(); ++k)
+	{
+		if (_poll_fds[k].fd == fd)
+		{
+			_poll_fds.erase(_poll_fds.begin() + k);
+			return;
+		}
+	}
+}
+
+void Server::closeClientFull(int client_fd)
+{
+	std::map<int, Client>::iterator it = _clients.find(client_fd);
+	if (it == _clients.end())
+		return;
+	Client &client = it->second;
+
+	if (client.state == CGI_RUNNING)
+	{
+		if (client.cgi.pid > 0)
+		{
+			kill(client.cgi.pid, SIGKILL);
+			waitpid(client.cgi.pid, NULL, 0);
+		}
+		if (client.cgi.stdin_fd >= 0)
+		{
+			removePollFd(client.cgi.stdin_fd);
+			_cgi_fds.erase(client.cgi.stdin_fd);
+			close(client.cgi.stdin_fd);
+		}
+		if (client.cgi.stdout_fd >= 0)
+		{
+			removePollFd(client.cgi.stdout_fd);
+			_cgi_fds.erase(client.cgi.stdout_fd);
+			close(client.cgi.stdout_fd);
+		}
+	}
+
+	removePollFd(client_fd);
+	close(client_fd);
+	_clients.erase(it);
 }
 
 // =============================================================================
@@ -204,7 +266,7 @@ void Server::run()
 {
 	while (true)
 	{
-		int ret = poll(&_poll_fds[0], _poll_fds.size(), -1);
+		int ret = poll(&_poll_fds[0], _poll_fds.size(), 1000);
 
 		if (ret < 0)
 			continue;
@@ -223,6 +285,7 @@ void Server::run()
 			{
 				if (!handleCgiIo(i))
 				{
+					i--;
 					continue;
 				}
 			}
@@ -254,5 +317,6 @@ void Server::run()
 				}
 			}
 		}
+		checkTimeouts();
 	}
 }
