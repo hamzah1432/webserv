@@ -1,7 +1,7 @@
 NAME     = webserv
 CXX      = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
-SRCS = main.cpp Server.cpp ServerRouting.cpp ServerHandlers.cpp Config.cpp HTTPRequest.cpp HTTPResponse.cpp
+SRCS = main.cpp Server.cpp ServerRouting.cpp ServerHandlers.cpp Config.cpp HTTPRequest.cpp HTTPResponse.cpp ServerCgi.cpp
 OBJS     = $(SRCS:.cpp=.o)
 HEADERS  = Server.hpp Config.hpp HTTPRequest.hpp HTTPResponse.hpp
 

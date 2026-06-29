@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/23 23:38:31 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/29 10:58:42 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -90,9 +90,32 @@ bool Server::handleClientRead(size_t i)
 
 	if (client.request.isComplete())
 	{
-		HTTPResponse response = buildResponse(_configs[client.server_index], client.request);
-		client.write_buffer = response.toString();
-		_poll_fds[i].events = POLLOUT;
+		const ServerConfig &server = _configs[client.server_index];
+		const HTTPRequest &req = client.request;
+
+		std::string path = req.getUri();
+		std::string::size_type qpos = path.find('?');
+		if (qpos != std::string::npos)
+			path = path.substr(0, qpos);
+
+		const LocationConfig *loc = req.isValid() ? matchLocation(server, path) : NULL;
+		std::string filepath;
+		bool is_cgi = false;
+
+		if (loc && checkMethodAllowed(loc->methods, req.getMethod()) && loc->redirect.empty())
+		{
+			filepath = resolvePath(*loc, path);
+			is_cgi = isCgiRequest(*loc, filepath);
+		}
+
+		if (is_cgi)
+			startCgi(client, *loc, filepath);
+		else
+		{
+			HTTPResponse response = buildResponse(server, req);
+			client.write_buffer = response.toString();
+			_poll_fds[i].events = POLLOUT;
+		}
 	}
 	return true;
 }
@@ -120,8 +143,6 @@ bool Server::handleClientWrite(size_t i)
 
 	return true;
 }
-
-
 
 // =============================================================================
 // 4. Main Functions
@@ -188,6 +209,13 @@ void Server::run()
 			{
 				if (_poll_fds[i].revents & POLLIN)
 					acceptNewClient(_poll_fds[i].fd);
+			}
+			else if (_cgi_fds.count(_poll_fds[i].fd))
+			{
+				if (!handleCgiIo(i))
+				{
+					continue;
+				}
 			}
 			else
 			{
