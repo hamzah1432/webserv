@@ -13,7 +13,7 @@ HTTPResponse Server::handleGet(const ServerConfig &server, const LocationConfig 
 {
 	HTTPResponse response;
 
-	std::string real_filepath = resolvePath(loc, request.getUri());
+	std::string real_filepath = resolvePath(loc, request.getURI());
 
 	struct stat st;
 	if (stat(real_filepath.c_str(), &st) != 0)
@@ -37,7 +37,7 @@ HTTPResponse Server::handleGet(const ServerConfig &server, const LocationConfig 
 		else if (loc.autoindex)
 		{
 			response.setStatus(200);
-			response.setBody(generateAutoindex(real_filepath, request.getUri()));
+			response.setBody(generateAutoindex(real_filepath, request.getURI()));
 			response.setHeader("Content-Type", "text/html");
 		}
 		else
@@ -60,9 +60,9 @@ HTTPResponse Server::handleGet(const ServerConfig &server, const LocationConfig 
 		}
 	}
 
-	if (response.getStatus() >= 400)
+	if (response.getStatusCode() >= 400)
 	{
-		response.setBody(getErrorBody(server, response.getStatus()));
+		response.setBody(getErrorBody(server, response.getStatusCode()));
 		response.setHeader("Content-Type", "text/html");
 	}
 
@@ -165,7 +165,7 @@ HTTPResponse Server::handlePost(const ServerConfig &server, const LocationConfig
 	if (loc.upload_path.empty())
 		return makeErrorResponse(server, 403);
 
-	std::string uri = request.getUri();
+	std::string uri = request.getURI();
 
 	if (!uri.empty() && uri[uri.size() - 1] == '/')
 		return makeErrorResponse(server, 400);
@@ -198,9 +198,9 @@ HTTPResponse Server::handlePost(const ServerConfig &server, const LocationConfig
 		response.setHeader("Content-Type", "text/html");
 	}
 
-	if (response.getStatus() >= 400)
+	if (response.getStatusCode() >= 400)
 	{
-		response.setBody(getErrorBody(server, response.getStatus()));
+		response.setBody(getErrorBody(server, response.getStatusCode()));
 		response.setHeader("Content-Type", "text/html");
 	}
 
@@ -215,7 +215,7 @@ HTTPResponse Server::handleDelete(const ServerConfig &server, const LocationConf
 {
     HTTPResponse response;
 
-    std::string real_filepath = resolvePath(loc, request.getUri());
+    std::string real_filepath = resolvePath(loc, request.getURI());
 
     struct stat st;
     if (stat(real_filepath.c_str(), &st) != 0)
@@ -240,9 +240,9 @@ HTTPResponse Server::handleDelete(const ServerConfig &server, const LocationConf
         }
     }
 
-    if (response.getStatus() >= 400)
+    if (response.getStatusCode() >= 400)
     {
-        response.setBody(getErrorBody(server, response.getStatus()));
+        response.setBody(getErrorBody(server, response.getStatusCode()));
         response.setHeader("Content-Type", "text/html");
     }
 

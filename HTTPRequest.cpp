@@ -1,290 +1,314 @@
-/*temp*/
 #include "HTTPRequest.hpp"
-#include <vector>
-#include <cctype>
 
-// --- file-local helpers ----------------------------------------------------
-
-namespace
-{
-	std::string toLower(const std::string &s)
-	{
-		std::string out(s);
-		for (size_t i = 0; i < out.size(); ++i)
-			out[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(out[i])));
-		return out;
-	}
-
-	std::string trim(const std::string &s)
-	{
-		std::string::size_type start = 0;
-		std::string::size_type end = s.size();
-		while (start < end && (s[start] == ' ' || s[start] == '\t'))
-			++start;
-		while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t'))
-			--end;
-		return s.substr(start, end - start);
-	}
-
-	std::vector<std::string> splitCRLF(const std::string &block)
-	{
-		std::vector<std::string> out;
-		std::string::size_type start = 0;
-		while (true)
-		{
-			std::string::size_type pos = block.find("\r\n", start);
-			if (pos == std::string::npos)
-			{
-				out.push_back(block.substr(start));
-				break;
-			}
-			out.push_back(block.substr(start, pos - start));
-			start = pos + 2;
-		}
-		return out;
-	}
-
-	// Returns: 0 = supported, 400 = malformed, 505 = unsupported version.
-	int checkVersion(const std::string &v)
-	{
-		if (v.size() != 8 || v.compare(0, 5, "HTTP/") != 0)
-			return 400;
-		if (!std::isdigit(static_cast<unsigned char>(v[5])) ||
-			v[6] != '.' ||
-			!std::isdigit(static_cast<unsigned char>(v[7])))
-			return 400;
-		if (v == "HTTP/1.0" || v == "HTTP/1.1")
-			return 0;
-		return 505;
-	}
-
-	bool parseContentLength(const std::string &s, size_t &out)
-	{
-		if (s.empty())
-			return false;
-		size_t val = 0;
-		for (size_t i = 0; i < s.size(); ++i)
-		{
-			if (!std::isdigit(static_cast<unsigned char>(s[i])))
-				return false;
-			val = val * 10 + static_cast<size_t>(s[i] - '0');
-		}
-		out = val;
-		return true;
-	}
-}
-
-// --- orthodox canonical form -----------------------------------------------
-
-void HTTPRequest::init()
-{
-	_buffer.clear();
-	_method.clear();
-	_uri.clear();
-	_version.clear();
-	_headers.clear();
-	_body.clear();
-	_headersParsed = false;
-	_hasContentLength = false;
-	_contentLength = 0;
-	_maxBodySize = static_cast<size_t>(-1); // effectively unlimited until set
-	_complete = false;
-	_valid = true;
-	_errorCode = 0;
-}
+#include <sstream>
+#include <cstdlib>
 
 HTTPRequest::HTTPRequest()
 {
-	init();
+	reset();
 }
 
-HTTPRequest::HTTPRequest(const HTTPRequest &other)
+void HTTPRequest::reset()
 {
-	*this = other;
+	_valid = true;
+	_errorCode = 0;
+
+	_buffer.clear();
+
+	_headersParsed = false;
+	_complete = false;
+
+	_contentLength = 0;
+
+	_method.clear();
+	_uri.clear();
+	_version.clear();
+
+	_headers.clear();
+	_body.clear();
 }
 
-HTTPRequest &HTTPRequest::operator=(const HTTPRequest &other)
+void HTTPRequest::parseRequestLine(const std::string& line)
 {
-	if (this != &other)
-	{
-		_buffer = other._buffer;
-		_method = other._method;
-		_uri = other._uri;
-		_version = other._version;
-		_headers = other._headers;
-		_body = other._body;
-		_headersParsed = other._headersParsed;
-		_hasContentLength = other._hasContentLength;
-		_contentLength = other._contentLength;
-		_maxBodySize = other._maxBodySize;
-		_complete = other._complete;
-		_valid = other._valid;
-		_errorCode = other._errorCode;
-	}
-	return *this;
+	std::stringstream ss(line);
+
+	ss >> _method;
+	ss >> _uri;
+	ss >> _version;
 }
 
-HTTPRequest::~HTTPRequest()
+void HTTPRequest::parseHeadersBlock(const std::string& headersBlock)
 {
-}
+	std::stringstream ss(headersBlock);
 
-// --- parsing ---------------------------------------------------------------
+	std::string line;
 
-void HTTPRequest::setError(int code)
-{
-	_valid = false;
-	_errorCode = code;
-	_complete = true; // parsing is finished; server should send the error
-}
-
-void HTTPRequest::feed(const std::string &data)
-{
-	if (_complete || !_valid)
+	if (!std::getline(ss, line))
 		return;
-	_buffer += data;
-	parse();
-}
 
-void HTTPRequest::parse()
-{
-	if (!_headersParsed)
-	{
-		std::string::size_type pos = _buffer.find("\r\n\r\n");
-		if (pos == std::string::npos)
-			return; // headers not fully received yet
-		std::string block = _buffer.substr(0, pos);
-		_buffer.erase(0, pos + 4); // whatever remains is body bytes
-		if (!parseHeaderBlock(block))
-			return; // error already set
-		_headersParsed = true;
-	}
-	if (_headersParsed && _valid)
-		parseBody();
-}
+	if (!line.empty() && line[line.size() - 1] == '\r')
+		line.erase(line.size() - 1);
 
-bool HTTPRequest::parseHeaderBlock(const std::string &block)
-{
-	std::vector<std::string> lines = splitCRLF(block);
-	if (lines.empty())
-	{
-		setError(400);
-		return false;
-	}
-	if (!parseRequestLine(lines[0]))
-		return false;
+	parseRequestLine(line);
 
-	for (size_t i = 1; i < lines.size(); ++i)
+	while (std::getline(ss, line))
 	{
-		const std::string &line = lines[i];
+		if (!line.empty() && line[line.size() - 1] == '\r')
+			line.erase(line.size() - 1);
+
 		if (line.empty())
 			continue;
-		std::string::size_type colon = line.find(':');
+
+		size_t colon = line.find(':');
+
 		if (colon == std::string::npos)
-		{
-			setError(400);
-			return false;
-		}
-		std::string name = toLower(trim(line.substr(0, colon)));
-		std::string value = trim(line.substr(colon + 1));
-		if (name.empty())
-		{
-			setError(400);
-			return false;
-		}
-		_headers[name] = value;
+			continue;
+
+		std::string key = line.substr(0, colon);
+		std::string value = line.substr(colon + 1);
+
+		while (!value.empty() && value[0] == ' ')
+			value.erase(0, 1);
+
+		_headers[key] = value;
 	}
 
-	bool hasCL = _headers.find("content-length") != _headers.end();
-	bool hasTE = _headers.find("transfer-encoding") != _headers.end();
-	if (hasCL && hasTE)
+	if (hasHeader("Content-Length") && validateContentLength())
 	{
-		setError(400);
+		std::stringstream ss(
+			getHeader("Content-Length"));
+
+		ss >> _contentLength;
+	}
+}
+
+bool HTTPRequest::validateMethod()
+{
+	if (_method == "GET")
+		return true;
+
+	if (_method == "POST")
+		return true;
+
+	if (_method == "DELETE")
+		return true;
+
+	_valid = false;
+	_errorCode = 501;
+
+	return false;
+}
+
+bool HTTPRequest::validateVersion()
+{
+	if (_version == "HTTP/1.1")
+		return true;
+
+	if (_version == "HTTP/1.0")
+		return true;
+
+	_valid = false;
+	_errorCode = 505;
+
+	return false;
+}
+
+bool HTTPRequest::validateRequestLine()
+{
+	if (_method.empty())
+	{
+		_valid = false;
+		_errorCode = 400;
 		return false;
 	}
-	if (hasTE)
+
+	if (_uri.empty())
 	{
-		setError(501); // chunked / any transfer-encoding is out of scope
+		_valid = false;
+		_errorCode = 400;
 		return false;
 	}
-	if (hasCL)
+
+	if (_version.empty())
 	{
-		size_t len;
-		if (!parseContentLength(_headers["content-length"], len))
-		{
-			setError(400);
-			return false;
-		}
-		if (len > _maxBodySize)
-		{
-			setError(413);
-			return false;
-		}
-		_hasContentLength = true;
-		_contentLength = len;
+		_valid = false;
+		_errorCode = 400;
+		return false;
 	}
+
+	if (!validateMethod())
+		return false;
+
+	if (!validateVersion())
+		return false;
+
 	return true;
 }
 
-bool HTTPRequest::parseRequestLine(const std::string &line)
+//helper for validateContentLength
+
+static bool isDigits(const std::string& str)
 {
-	std::string::size_type sp1 = line.find(' ');
-	if (sp1 == std::string::npos)
-	{
-		setError(400);
-		return false;
-	}
-	std::string::size_type sp2 = line.find(' ', sp1 + 1);
-	if (sp2 == std::string::npos)
-	{
-		setError(400);
-		return false;
-	}
-	_method = line.substr(0, sp1);
-	_uri = line.substr(sp1 + 1, sp2 - sp1 - 1);
-	_version = line.substr(sp2 + 1);
+	size_t i = 0;
 
-	if (_method.empty() || _uri.empty() || _version.empty() ||
-		_version.find(' ') != std::string::npos)
-	{
-		setError(400);
+	if (str.empty())
 		return false;
+
+	while (i < str.size())
+	{
+		if (str[i] < '0' || str[i] > '9')
+			return false;
+
+		++i;
 	}
 
-	int vc = checkVersion(_version);
-	if (vc != 0)
-	{
-		setError(vc);
-		return false;
-	}
 	return true;
 }
 
-void HTTPRequest::parseBody()
+bool HTTPRequest::validateContentLength()
 {
-	if (!_hasContentLength)
+	if (!hasHeader("Content-Length"))
+		return true;
+
+	std::string value = getHeader("Content-Length");
+
+	if (!isDigits(value))
 	{
-		_complete = true; // no Content-Length => empty body, done after headers
+		_valid = false;
+		_errorCode = 400;
+		return false;
+	}
+
+	return true;
+}
+
+void HTTPRequest::feed(const std::string& data)
+{
+	if (_complete)
+		return;
+
+	_buffer += data;
+
+	size_t headersEnd = _buffer.find("\r\n\r\n");
+
+	if (headersEnd == std::string::npos)
+		return;
+
+	if (!_headersParsed)
+	{
+		parseHeadersBlock(_buffer.substr(0, headersEnd));
+
+		_headersParsed = true;
+	}
+
+	if (!validateRequestLine())
+	{
+		_complete = true;
 		return;
 	}
-	if (_buffer.size() >= _contentLength)
+
+	if (!validateContentLength())
 	{
-		_body = _buffer.substr(0, _contentLength);
-		_buffer.erase(0, _contentLength);
 		_complete = true;
+		return;
 	}
-	// otherwise wait for the rest of the body
+
+	size_t bodyStart = headersEnd + 4;
+
+	size_t bodySize = _buffer.size() - bodyStart;
+
+	if (bodySize < _contentLength)
+		return;
+
+	_body = _buffer.substr(bodyStart, _contentLength);
+
+	_complete = true;
 }
 
-// --- accessors -------------------------------------------------------------
+bool HTTPRequest::isComplete() const
+{
+	return (_complete);
+}
 
-bool HTTPRequest::isComplete() const { return _complete; }
-bool HTTPRequest::isValid() const { return _valid; }
-int HTTPRequest::getErrorCode() const { return _errorCode; }
+bool HTTPRequest::isValid() const
+{
+	return _valid;
+}
 
-std::string HTTPRequest::getMethod() const { return _method; }
-std::string HTTPRequest::getUri() const { return _uri; }
-std::string HTTPRequest::getVersion() const { return _version; }
-std::map<std::string, std::string> HTTPRequest::getHeaders() const { return _headers; }
-std::string HTTPRequest::getBody() const { return _body; }
+int HTTPRequest::getErrorCode() const
+{
+	return _errorCode;
+}
 
-void HTTPRequest::setMaxBodySize(size_t max) { _maxBodySize = max; }
+bool HTTPRequest::hasHeader(const std::string& key) const
+{
+	return (_headers.find(key) != _headers.end());
+}
+
+const std::string& HTTPRequest::getMethod() const
+{
+	return (_method);
+}
+
+const std::string& HTTPRequest::getURI() const
+{
+	return (_uri);
+}
+
+const std::string& HTTPRequest::getVersion() const
+{
+	return (_version);
+}
+
+const std::string& HTTPRequest::getBody() const
+{
+	return (_body);
+}
+
+const std::map<std::string, std::string>& HTTPRequest::getHeaders() const
+{
+	return (_headers);
+}
+
+std::string HTTPRequest::getHeader(const std::string& key) const
+{
+	std::map<std::string, std::string>::const_iterator it;
+
+	it = _headers.find(key);
+
+	if (it == _headers.end())
+		return "";
+
+	return it->second;
+}
+
+std::string HTTPRequest::getPath() const
+{
+	size_t queryPos = _uri.find('?');
+
+	if (queryPos == std::string::npos)
+		return _uri;
+
+	return _uri.substr(0, queryPos);
+}
+
+std::string HTTPRequest::getQueryString() const
+{
+	size_t queryPos = _uri.find('?');
+
+	if (queryPos == std::string::npos)
+		return "";
+
+	return _uri.substr(queryPos + 1);
+}
+
+bool HTTPRequest::shouldKeepAlive() const
+{
+	if (!hasHeader("Connection"))
+		return true;
+
+	if (getHeader("Connection") == "close")
+		return false;
+
+	return true;
+}

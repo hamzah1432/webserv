@@ -20,7 +20,7 @@ void Server::startCgi(Client &client, const LocationConfig &loc, const std::stri
 	if (pipe(in_pipe) < 0)
 	{
 		HTTPResponse r = makeErrorResponse(_configs[client.server_index], 500);
-		client.write_buffer = r.toString();
+		client.write_buffer = r.build();
 		client.state = WRITING;
 		return;
 	}
@@ -29,7 +29,7 @@ void Server::startCgi(Client &client, const LocationConfig &loc, const std::stri
 		close(in_pipe[0]);
 		close(in_pipe[1]);
 		HTTPResponse r = makeErrorResponse(_configs[client.server_index], 500);
-		client.write_buffer = r.toString();
+		client.write_buffer = r.build();
 		client.state = WRITING;
 		return;
 	}
@@ -42,7 +42,7 @@ void Server::startCgi(Client &client, const LocationConfig &loc, const std::stri
 		close(out_pipe[0]);
 		close(out_pipe[1]);
 		HTTPResponse r = makeErrorResponse(_configs[client.server_index], 500);
-		client.write_buffer = r.toString();
+		client.write_buffer = r.build();
 		client.state = WRITING;
 		return;
 	}
@@ -119,7 +119,7 @@ std::vector<std::string> Server::buildCgiEnv(const ServerConfig &server, const L
 	(void)loc;
 	std::vector<std::string> env;
 
-	std::string uri = request.getUri();
+	std::string uri = request.getURI();
 	std::string script_name = uri;
 	std::string query = "";
 	std::string::size_type q = uri.find('?');
@@ -216,7 +216,7 @@ bool Server::handleCgiIo(size_t i)
 		waitpid(client.cgi.pid, &status, 0);
 
 		HTTPResponse response = parseCgiOutput(client.cgi.output);
-		client.write_buffer = response.toString();
+		client.write_buffer = response.build();
 		client.state = WRITING;
 
 

@@ -1,115 +1,147 @@
-/*temp*/
-
 #include "HTTPResponse.hpp"
+
 #include <sstream>
-#include <cctype>
-
-
-namespace
-{
-    std::string toLower(const std::string &s)
-    {
-        std::string out(s);
-        for (size_t i = 0; i < out.size(); ++i)
-            out[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(out[i])));
-        return out;
-    }
-
-    std::string reasonPhrase(int code)
-    {
-        switch (code)
-        {
-            case 200: return "OK";
-            case 201: return "Created";
-            case 204: return "No Content";
-            case 301: return "Moved Permanently";
-            case 302: return "Found";
-            case 304: return "Not Modified";
-            case 400: return "Bad Request";
-            case 403: return "Forbidden";
-            case 404: return "Not Found";
-            case 405: return "Method Not Allowed";
-            case 408: return "Request Timeout";
-            case 411: return "Length Required";
-            case 413: return "Payload Too Large";
-            case 414: return "URI Too Long";
-            case 500: return "Internal Server Error";
-            case 501: return "Not Implemented";
-            case 505: return "HTTP Version Not Supported";
-            default:  return "Unknown";
-        }
-    }
-}
-
-// --- orthodox canonical form -----------------------------------------------
 
 HTTPResponse::HTTPResponse()
-    : _code(200), _reason("OK"), _headers(), _body()
 {
+	reset();
 }
 
-HTTPResponse::HTTPResponse(const HTTPResponse &other)
+std::string HTTPResponse::getReasonPhrase(int code) const
 {
-    *this = other;
-}
+	switch (code)
+	{
+		case 200: return "OK";
+		case 201: return "Created";
+		case 204: return "No Content";
 
-HTTPResponse &HTTPResponse::operator=(const HTTPResponse &other)
-{
-    if (this != &other)
-    {
-        _code = other._code;
-        _reason = other._reason;
-        _headers = other._headers;
-        _body = other._body;
-    }
-    return *this;
-}
+		case 301: return "Moved Permanently";
+		case 302: return "Found";
 
-HTTPResponse::~HTTPResponse()
-{
-}
+		case 400: return "Bad Request";
+		case 403: return "Forbidden";
+		case 404: return "Not Found";
+		case 405: return "Method Not Allowed";
+		case 413: return "Payload Too Large";
 
-// --- builders --------------------------------------------------------------
+		case 500: return "Internal Server Error";
+		case 501: return "Not Implemented";
+		case 502: return "Bad Gateway";
+
+		default: return "Unknown";
+	}
+}
 
 void HTTPResponse::setStatus(int code)
 {
-    _code = code;
-    _reason = reasonPhrase(code);
+	_statusCode = code;
+	_reasonPhrase = getReasonPhrase(code);
 }
 
-void HTTPResponse::setHeader(const std::string &key, const std::string &value)
+void HTTPResponse::setHeader(
+	const std::string& key,
+	const std::string& value)
 {
-    _headers[key] = value;
+	_headers[key] = value;
 }
 
-void HTTPResponse::setBody(const std::string &body)
+int HTTPResponse::getStatusCode() const
 {
-    _body = body;
+    return _statusCode;
 }
 
-std::string HTTPResponse::toString() const
+std::string HTTPResponse::getHeader(
+    const std::string& key) const
 {
-    std::ostringstream oss;
-    oss << "HTTP/1.1 " << _code << " " << _reason << "\r\n";
+    std::map<std::string, std::string>::const_iterator it =
+        _headers.find(key);
 
-    // Emit user headers, but never the ones we always set ourselves.
-    for (std::map<std::string, std::string>::const_iterator it = _headers.begin();
-         it != _headers.end(); ++it)
-    {
-        std::string lname = toLower(it->first);
-        if (lname == "content-length" || lname == "connection")
-            continue;
-        oss << it->first << ": " << it->second << "\r\n";
-    }
+    if (it == _headers.end())
+        return "";
 
-    oss << "Content-Length: " << _body.size() << "\r\n";
-    oss << "Connection: close\r\n";
-    oss << "\r\n";
-    oss << _body;
-
-    return oss.str();
+    return it->second;
 }
 
-int HTTPResponse::getStatus() const {
-    return this->_code;
+bool HTTPResponse::hasHeader(
+    const std::string& key) const
+{
+    return _headers.find(key) != _headers.end();
+}
+
+const std::string& HTTPResponse::getBody() const
+{
+    return _body;
+}
+
+void HTTPResponse::setBody(const std::string& body)
+{
+	_body = body;
+
+	std::stringstream ss;
+
+	ss << body.size();
+
+	_headers["Content-Length"] = ss.str();
+}
+
+void HTTPResponse::removeHeader(
+	const std::string& key)
+{
+	_headers.erase(key);
+}
+
+void HTTPResponse::setContentType(
+	const std::string& type)
+{
+	_headers["Content-Type"] = type;
+}
+
+void HTTPResponse::setRedirect(
+	int code,
+	const std::string& location)
+{
+	setStatus(code);
+
+	_headers["Location"] = location;
+}
+
+void HTTPResponse::reset()
+{
+	_statusCode = 200;
+	_reasonPhrase = "OK";
+
+	_headers.clear();
+
+	_headers["Server"] = "webserv";
+
+	_body.clear();
+}
+
+std::string HTTPResponse::build() const
+{
+	std::stringstream response;
+
+	response
+		<< "HTTP/1.1 "
+		<< _statusCode
+		<< " "
+		<< _reasonPhrase
+		<< "\r\n";
+
+	std::map<std::string, std::string>::const_iterator it;
+
+	for (it = _headers.begin(); it != _headers.end(); ++it)
+	{
+		response
+			<< it->first
+			<< ": "
+			<< it->second
+			<< "\r\n";
+	}
+
+	response << "\r\n";
+
+	response << _body;
+
+	return response.str();
 }

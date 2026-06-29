@@ -6,7 +6,7 @@
 /*   By: halmuhis <halmuhesn@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/14 16:44:57 by halmuhis          #+#    #+#             */
-/*   Updated: 2026/06/29 10:58:42 by halmuhis         ###   ########.fr       */
+/*   Updated: 2026/06/29 13:38:48 by halmuhis         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,7 +60,7 @@ void Server::acceptNewClient(int listen_fd)
 	new_client.fd = client_fd;
 	new_client.write_buffer = "";
 	new_client.server_index = _listen_fds[listen_fd];
-	new_client.request.setMaxBodySize(_configs[new_client.server_index].client_max_body_size);
+	// new_client.request.setMaxBodySize(_configs[new_client.server_index].client_max_body_size);
 	_clients[client_fd] = new_client;
 }
 
@@ -93,7 +93,16 @@ bool Server::handleClientRead(size_t i)
 		const ServerConfig &server = _configs[client.server_index];
 		const HTTPRequest &req = client.request;
 
-		std::string path = req.getUri();
+		if (req.isValid() && req.getBody().size() > server.client_max_body_size)
+		{
+			HTTPResponse response = makeErrorResponse(server, 413);
+			response.setHeader("Connection", "close");
+			client.write_buffer = response.build() + "\r\n";
+			_poll_fds[i].events = POLLOUT;
+			return true;
+		}
+
+		std::string path = req.getURI();
 		std::string::size_type qpos = path.find('?');
 		if (qpos != std::string::npos)
 			path = path.substr(0, qpos);
@@ -113,7 +122,7 @@ bool Server::handleClientRead(size_t i)
 		else
 		{
 			HTTPResponse response = buildResponse(server, req);
-			client.write_buffer = response.toString();
+			client.write_buffer = response.build();
 			_poll_fds[i].events = POLLOUT;
 		}
 	}

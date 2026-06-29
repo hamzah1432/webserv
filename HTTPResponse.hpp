@@ -1,4 +1,3 @@
-/*temp*/
 #ifndef HTTPRESPONSE_HPP
 #define HTTPRESPONSE_HPP
 
@@ -8,23 +7,45 @@
 class HTTPResponse
 {
 private:
-    int                                _code;
-    std::string                        _reason;
-    std::map<std::string, std::string> _headers;
-    std::string                        _body;
+	int _statusCode;
+
+	std::string _reasonPhrase;
+
+	std::map<std::string, std::string> _headers;
+
+	std::string _body;
+
+	std::string getReasonPhrase(int code) const;
 
 public:
-    HTTPResponse();
-    HTTPResponse(const HTTPResponse &other);
-    HTTPResponse &operator=(const HTTPResponse &other);
-    ~HTTPResponse();
+	HTTPResponse();
 
-    void setStatus(int code);
-    void setHeader(const std::string &key, const std::string &value);
-    void setBody(const std::string &body);
-    int getStatus() const;
+	void setStatus(int code);
 
-    std::string toString() const;
+	int getStatusCode() const;
+	std::string getHeader(const std::string &key) const;
+	bool hasHeader(const std::string &key) const;
+	const std::string &getBody() const;
+
+	void setHeader(
+		const std::string &key,
+		const std::string &value);
+
+	void setBody(const std::string &body);
+
+	void removeHeader(const std::string &key);
+
+	void setContentType(
+		const std::string &type);
+
+	void setRedirect(
+		int code,
+		const std::string &location);
+
+	void reset();
+
+	std::string build() const;
+
 };
 
 #endif
